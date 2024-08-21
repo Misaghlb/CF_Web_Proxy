@@ -18,26 +18,30 @@ export async function onRequest(context) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const contentLength = response.headers.get('Content-Length');
+    const contentLength = parseInt(response.headers.get('Content-Length'), 10);
     const newHeaders = new Headers(response.headers);
     newHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
     newHeaders.set('Accept-Ranges', 'bytes');
 
-    if (contentLength) {
-      newHeaders.set('Content-Length', contentLength);
-    }
-
     const range = request.headers.get('Range');
-    if (range) {
+    if (range && contentLength) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : contentLength - 1;
-      const chunksize = (end - start) + 1;
+      const chunkSize = (end - start) + 1;
 
+      // Update headers for partial content
       newHeaders.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
-      newHeaders.set('Content-Length', chunksize.toString());
+      newHeaders.set('Content-Length', chunkSize.toString());
 
-      return new Response(response.body, {
+      const partialResponse = await fetch(decodedUrl, {
+        headers: {
+          ...request.headers,
+          'Range': `bytes=${start}-${end}`,
+        },
+      });
+
+      return new Response(partialResponse.body, {
         status: 206,
         headers: newHeaders,
       });
