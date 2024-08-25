@@ -1,3 +1,23 @@
+async function getResponseDetails(response) {
+  // Convert headers to an object
+  const headersObj = {};
+  response.headers.forEach((value, key) => {
+    headersObj[key] = value;
+  });
+
+  // Read the body as text
+  const bodyText = await response.text();
+
+  // Create a combined result
+  const result = {
+    headers: headersObj,
+    body: bodyText
+  };
+
+  // Return or display the result
+  return JSON.stringify(result, null, 2); // Pretty-print JSON
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -40,11 +60,9 @@ export async function onRequest(context) {
     const acceptRanges = response.headers.get('Accept-Ranges');
     if (acceptRanges !== 'bytes') {
 
-      let re = {
-        'body' : response.body, headers: response.headers
-      }
-            return new Response(re);
-      throw new Error(`Server does not support resumable downloads: ${response.text()}`);
+    const resultText = await getResponseDetails(response);
+      return new Response(resultText);
+      throw new Error(`Server does not support resumable downloads: ${resultText}`);
     }
 
     // Fetch the actual content
