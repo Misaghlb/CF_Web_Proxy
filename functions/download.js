@@ -10,7 +10,7 @@ export async function onRequest(context) {
 
   try {
     const { url: decodedUrl, filename } = JSON.parse(atob(encodedData));
-    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 10MB chunks
     const tempStore = []; // Temporary store for chunks
 
     const response = await fetch(decodedUrl, { method: 'HEAD' });
