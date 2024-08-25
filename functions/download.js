@@ -15,13 +15,16 @@ export async function onRequest(context) {
     let response = await fetch(finalUrl, {
       method: 'HEAD',
       headers: request.headers,
+      redirect: 'manual' // This prevents automatic redirection
     });
 
     // Handle redirection if the status is 301
     if (response.status === 301) {
+      console.log('is 301');
       const location = response.headers.get('Location');
       if (location) {
         finalUrl = location;
+        console.log('locaton exist', finalUrl);
         response = await fetch(finalUrl, {
           method: 'HEAD',
           headers: request.headers,
