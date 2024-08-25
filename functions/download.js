@@ -23,25 +23,26 @@ export async function onRequest(context) {
     newHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
     newHeaders.set('Accept-Ranges', 'bytes');
 
-    if (contentLength) {
-      newHeaders.set('Content-Length', contentLength);
-    }
-
     const range = request.headers.get('Range');
-    if (range) {
+    if (range && contentLength) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : contentLength - 1;
+      const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength, 10) - 1;
       const chunksize = (end - start) + 1;
 
       newHeaders.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
       newHeaders.set('Content-Length', chunksize.toString());
 
-      return new Response(response.body, {
+      const slicedStream = response.body.slice(start, end + 1);
+      return new Response(slicedStream, {
         status: 206,
         headers: newHeaders,
       });
     } else {
+      // Fallback for non-range requests or when content length is missing
+      if (contentLength) {
+        newHeaders.set('Content-Length', contentLength);
+      }
       return new Response(response.body, {
         status: 200,
         headers: newHeaders,
