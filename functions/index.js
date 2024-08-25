@@ -9,7 +9,7 @@ export async function onRequest(context) {
         <meta property="og:description" content="A web proxy solution built on Cloudflare Network">
         <meta property="og:url" content="https://cf-web-proxy.pages.dev">
         <meta property="og:type" content="website">
-        <meta name="cdn-site-verification" content="NHfl9QMeYVGp6S"/>
+        <meta name="cdn-site-verification" content="0iBhmrOtcFKMes"/>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
           body { 
