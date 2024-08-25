@@ -19,7 +19,9 @@ async function getResponseDetails(response) {
 }
 
 export async function onRequest(context) {
-  const { request } = context;
+    const request = new Request("https://edge05.66065.ir.cdn.ir/download?data=eyJ1cmwiOiJodHRwczovL2NsZDcuaG9zdGRsLm5ldC9zZXJpYWwvZm9yZWlnbi8yMDI0L2tvcmVhLWtoaXRhbi13YXIvS29yZWEtS2hpdGFuX1dhcl9FMTJfNzIwcC5ta3YiLCJmaWxlbmFtZSI6IktvcmVhLUtoaXRhbl9XYXJfRTEyXzcyMHAubWt2In0=");
+
+//  const { request } = context;
   const url = new URL(request.url);
   const searchParams = url.searchParams;
 
