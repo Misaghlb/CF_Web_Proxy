@@ -1,27 +1,5 @@
-async function getResponseDetails(response) {
-  // Convert headers to an object
-  const headersObj = {};
-  response.headers.forEach((value, key) => {
-    headersObj[key] = value;
-  });
-
-  // Read the body as text
-  const bodyText = await response.text();
-
-  // Create a combined result
-  const result = {
-    headers: headersObj,
-    body: bodyText
-  };
-
-  // Return or display the result
-  return JSON.stringify(result, null, 2); // Pretty-print JSON
-}
-
 export async function onRequest(context) {
-    const request = new Request("https://edge05.66065.ir.cdn.ir/download?data=eyJ1cmwiOiJodHRwczovL2NsZDcuaG9zdGRsLm5ldC9zZXJpYWwvZm9yZWlnbi8yMDI0L2tvcmVhLWtoaXRhbi13YXIvS29yZWEtS2hpdGFuX1dhcl9FMTJfNzIwcC5ta3YiLCJmaWxlbmFtZSI6IktvcmVhLUtoaXRhbl9XYXJfRTEyXzcyMHAubWt2In0=");
-
-//  const { request } = context;
+  const { request } = context;
   const url = new URL(request.url);
   const searchParams = url.searchParams;
 
@@ -32,67 +10,34 @@ export async function onRequest(context) {
 
   try {
     const { url: decodedUrl, filename } = JSON.parse(atob(encodedData));
+    const range = request.headers.get('Range');
 
-    let finalUrl = decodedUrl;
-    let response = await fetch(finalUrl, {
-      method: 'HEAD',
-      headers: request.headers,
-      redirect: 'manual' // This prevents automatic redirection
-    });
+    const fetchOptions = {
+      headers: {
+        ...request.headers,
+      },
+    };
 
-    // Handle redirection if the status is 301
-    if (response.status === 301) {
-      console.log('is 301');
-      const location = response.headers.get('Location');
-      if (location) {
-        finalUrl = location;
-        console.log('locaton exist', finalUrl);
-        response = await fetch(finalUrl, {
-          method: 'HEAD',
-          headers: request.headers,
-        });
-      }
+    if (range) {
+      fetchOptions.headers['Range'] = range;
     }
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    // Check if the server supports byte ranges
-    const acceptRanges = response.headers.get('Accept-Ranges');
-    if (acceptRanges !== 'bytes') {
-
-    const resultText = await getResponseDetails(response);
-      return new Response(resultText);
-      throw new Error(`Server does not support resumable downloads: ${resultText}`);
-    }
-
-    // Fetch the actual content
-    response = await fetch(finalUrl, {
-      headers: request.headers,
-    });
+    const response = await fetch(decodedUrl, fetchOptions);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const contentLength = response.headers.get('Content-Length');
-    const etag = response.headers.get('ETag');
-    const lastModified = response.headers.get('Last-Modified');
-
     const newHeaders = new Headers(response.headers);
+
     newHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
     newHeaders.set('Accept-Ranges', 'bytes');
 
-    if (contentLength) {
-      newHeaders.set('Content-Length', contentLength);
-    }
-
-    const range = request.headers.get('Range');
-    if (range) {
+    if (range && contentLength) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : contentLength - 1;
+      const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength, 10) - 1;
       const chunksize = (end - start) + 1;
 
       newHeaders.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
@@ -103,12 +48,15 @@ export async function onRequest(context) {
         headers: newHeaders,
       });
     } else {
+      if (contentLength) {
+        newHeaders.set('Content-Length', contentLength);
+      }
       return new Response(response.body, {
         status: 200,
         headers: newHeaders,
       });
     }
   } catch (error) {
-    return new Response(`Error: ${error.message}`, { status: 400 });
+    return new Response(`Error: ${error.message}`, { status: 502 });
   }
 }
