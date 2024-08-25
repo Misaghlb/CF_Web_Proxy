@@ -1,18 +1,3 @@
-async function fetchWithRetries(url, options, retries = 3, delay = 1000) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) {
-        return response;
-      }
-      throw new Error(`HTTP error! status: ${response.status}`);
-    } catch (error) {
-      if (i === retries - 1) throw error; // Last attempt
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-}
-
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -25,48 +10,44 @@ export async function onRequest(context) {
 
   try {
     const { url: decodedUrl, filename } = JSON.parse(atob(encodedData));
-    const range = request.headers.get('Range');
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+    const tempStore = []; // Temporary store for chunks
 
-    const fetchOptions = {
-      headers: {
-        ...request.headers,
-      },
-    };
+    const response = await fetch(decodedUrl, { method: 'HEAD' });
+    if (!response.ok) throw new Error(`Unable to retrieve file information. Status: ${response.status}`);
 
-    if (range) {
-      fetchOptions.headers['Range'] = range;
+    const contentLength = parseInt(response.headers.get('Content-Length'), 10);
+    if (!contentLength) throw new Error('Unable to determine file size');
+
+    for (let start = 0; start < contentLength; start += CHUNK_SIZE) {
+      const end = Math.min(start + CHUNK_SIZE - 1, contentLength - 1);
+
+      const rangeHeaders = new Headers(request.headers);
+      rangeHeaders.set('Range', `bytes=${start}-${end}`);
+
+      const chunkResponse = await fetch(decodedUrl, { headers: rangeHeaders });
+
+      if (!chunkResponse.ok) throw new Error(`Error fetching chunk: ${start}-${end}, Status: ${chunkResponse.status}`);
+
+      const chunkData = await chunkResponse.arrayBuffer();
+      tempStore.push(new Uint8Array(chunkData));
+
+      // Optionally, validate each chunk here (e.g., MD5/SHA checksum)
     }
 
-    const response = await fetchWithRetries(decodedUrl, fetchOptions);
+    // Reassemble the chunks into a single file
+    const fullFile = new Blob(tempStore);
+    const stream = fullFile.stream();
 
-    const contentLength = response.headers.get('Content-Length');
-    const newHeaders = new Headers(response.headers);
+    const finalHeaders = new Headers(response.headers);
+    finalHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
+    finalHeaders.set('Content-Length', contentLength.toString());
 
-    newHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
-    newHeaders.set('Accept-Ranges', 'bytes');
+    return new Response(stream, {
+      status: 200,
+      headers: finalHeaders,
+    });
 
-    if (range && contentLength) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength, 10) - 1;
-      const chunksize = (end - start) + 1;
-
-      newHeaders.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
-      newHeaders.set('Content-Length', chunksize.toString());
-
-      return new Response(response.body, {
-        status: 206,
-        headers: newHeaders,
-      });
-    } else {
-      if (contentLength) {
-        newHeaders.set('Content-Length', contentLength);
-      }
-      return new Response(response.body, {
-        status: 200,
-        headers: newHeaders,
-      });
-    }
   } catch (error) {
     return new Response(`Error: ${error.message}`, { status: 502 });
   }
