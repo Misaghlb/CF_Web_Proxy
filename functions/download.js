@@ -39,6 +39,11 @@ export async function onRequest(context) {
     // Check if the server supports byte ranges
     const acceptRanges = response.headers.get('Accept-Ranges');
     if (acceptRanges !== 'bytes') {
+
+      let re = {
+        'body' : response.body, headers: response.headers
+      }
+            return new Response(re);
       throw new Error(`Server does not support resumable downloads: ${response.text()}`);
     }
 
