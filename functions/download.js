@@ -30,14 +30,13 @@ export async function onRequest(context) {
       const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength, 10) - 1;
       const chunksize = (end - start) + 1;
 
-      // Ensure that the Content-Range header is correctly formatted
       newHeaders.set('Content-Range', `bytes ${start}-${end}/${contentLength}`);
       newHeaders.set('Content-Length', chunksize.toString());
 
-      // Read the response body stream and slice the required range
       const reader = response.body.getReader();
       let bytesRead = 0;
       let chunks = [];
+      let isPartialRead = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -45,15 +44,19 @@ export async function onRequest(context) {
 
         bytesRead += value.length;
 
-        // Only append the relevant range to the chunks
         if (bytesRead >= start) {
           const startInValue = Math.max(0, start - (bytesRead - value.length));
           const endInValue = Math.min(value.length, end - (bytesRead - value.length) + 1);
           chunks.push(value.slice(startInValue, endInValue));
+          isPartialRead = true;
         }
 
-        // Stop reading once we have read up to the end range
         if (bytesRead > end) break;
+      }
+
+      if (!isPartialRead) {
+        // Retry logic or full download as a fallback
+        return new Response('Partial read failed, unable to resume download', { status: 502 });
       }
 
       const slicedStream = new Blob(chunks).stream();
@@ -62,7 +65,6 @@ export async function onRequest(context) {
         headers: newHeaders,
       });
     } else {
-      // Fallback for non-range requests or when content length is missing
       if (contentLength) {
         newHeaders.set('Content-Length', contentLength);
       }
@@ -72,6 +74,7 @@ export async function onRequest(context) {
       });
     }
   } catch (error) {
+    // You can log the error for debugging purposes
     return new Response(`Error: ${error.message}`, { status: 502 });
   }
 }
