@@ -10,9 +10,27 @@ export async function onRequest(context) {
 
   try {
     const { url: decodedUrl, filename } = JSON.parse(atob(encodedData));
-    const response = await fetch(decodedUrl, {
-      headers: request.headers,
-    });
+
+    // Implementing a simple retry logic
+    let response;
+    let attempts = 0;
+    const maxAttempts = 3;
+    const retryDelay = 1000; // 1 second
+
+    while (attempts < maxAttempts) {
+      response = await fetch(decodedUrl, {
+        headers: request.headers,
+      });
+
+      if (response.ok) {
+        break; // Exit loop if successful
+      }
+
+      attempts += 1;
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -39,7 +57,6 @@ export async function onRequest(context) {
         headers: newHeaders,
       });
     } else {
-      // Fallback for non-range requests or when content length is missing
       if (contentLength) {
         newHeaders.set('Content-Length', contentLength);
       }
@@ -49,6 +66,6 @@ export async function onRequest(context) {
       });
     }
   } catch (error) {
-    return new Response(`Error: ${error.message}`, { status: 400 });
+    return new Response(`Error: ${error.message}`, { status: 502 });
   }
 }
