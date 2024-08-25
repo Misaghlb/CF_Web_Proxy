@@ -10,42 +10,27 @@ export async function onRequest(context) {
 
   try {
     const { url: decodedUrl, filename } = JSON.parse(atob(encodedData));
-    const CHUNK_SIZE = 20 * 1024 * 1024; // 10MB chunks
-    const tempStore = []; // Temporary store for chunks
+    const rangeHeader = request.headers.get('Range');
 
-    const response = await fetch(decodedUrl, { method: 'HEAD' });
-    if (!response.ok) throw new Error(`Unable to retrieve file information. Status: ${response.status}`);
+    // Pass the Range header to the fetch request
+    const fetchOptions = {
+      headers: {
+        ...request.headers,
+        'Range': rangeHeader || '', // Include Range header if present
+      },
+    };
 
-    const contentLength = parseInt(response.headers.get('Content-Length'), 10);
-    if (!contentLength) throw new Error('Unable to determine file size');
+    const response = await fetch(decodedUrl, fetchOptions);
 
-    for (let start = 0; start < contentLength; start += CHUNK_SIZE) {
-      const end = Math.min(start + CHUNK_SIZE - 1, contentLength - 1);
+    if (!response.ok) throw new Error(`Error fetching chunk. Status: ${response.status}`);
 
-      const rangeHeaders = new Headers(request.headers);
-      rangeHeaders.set('Range', `bytes=${start}-${end}`);
+    // Modify headers to ensure the correct handling of the content disposition
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
 
-      const chunkResponse = await fetch(decodedUrl, { headers: rangeHeaders });
-
-      if (!chunkResponse.ok) throw new Error(`Error fetching chunk: ${start}-${end}, Status: ${chunkResponse.status}`);
-
-      const chunkData = await chunkResponse.arrayBuffer();
-      tempStore.push(new Uint8Array(chunkData));
-
-      // Optionally, validate each chunk here (e.g., MD5/SHA checksum)
-    }
-
-    // Reassemble the chunks into a single file
-    const fullFile = new Blob(tempStore);
-    const stream = fullFile.stream();
-
-    const finalHeaders = new Headers(response.headers);
-    finalHeaders.set('Content-Disposition', `attachment; filename="${filename}"`);
-    finalHeaders.set('Content-Length', contentLength.toString());
-
-    return new Response(stream, {
-      status: 200,
-      headers: finalHeaders,
+    return new Response(response.body, {
+      status: rangeHeader ? 206 : 200,
+      headers: newHeaders,
     });
 
   } catch (error) {
