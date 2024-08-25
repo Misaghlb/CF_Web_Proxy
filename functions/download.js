@@ -1,3 +1,18 @@
+async function fetchWithRetries(url, options, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    } catch (error) {
+      if (i === retries - 1) throw error; // Last attempt
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
@@ -22,11 +37,7 @@ export async function onRequest(context) {
       fetchOptions.headers['Range'] = range;
     }
 
-    const response = await fetch(decodedUrl, fetchOptions);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    const response = await fetchWithRetries(decodedUrl, fetchOptions);
 
     const contentLength = response.headers.get('Content-Length');
     const newHeaders = new Headers(response.headers);
